@@ -1,0 +1,67 @@
+---
+- name: 創建工作目錄
+  file: dest={{ k8s_work_dir }}/{{ item }} state=directory
+  with_items:
+    - bin
+    - cfg
+    - ssl
+    - logs
+
+- name: 創建cni外掛程式目錄
+  file: dest={{ item }} state=directory
+  with_items:
+    - /opt/cni/bin
+    - /etc/cni/net.d
+
+- name: 創建臨時目錄
+  file: dest={{ tmp_dir }} state=directory
+
+- name: 分發並解壓k8s二進位包（需要花費一些時間...）
+  unarchive: src={{ item }} dest={{ tmp_dir }}
+  with_fileglob:
+    - "{{ software_dir }}/kubernetes-*.tar.gz"
+
+- name: 分發並解壓cni外掛程式二進位包
+  unarchive: src={{ item }} dest=/opt/cni/bin
+  with_fileglob:
+    - "{{ software_dir }}/cni-plugins-*.tgz"
+
+- name: 移動k8s node二進位檔案
+  shell: cp -rf {{ tmp_dir }}/kubernetes/server/bin/{kubelet,kube-proxy} {{ k8s_work_dir }}/bin
+
+- name: 分發k8s證書
+  copy: src=k8s_cert/{{ item }} dest={{ k8s_work_dir }}/ssl
+  with_items:
+    - ca.pem
+    - kube-proxy.pem
+    - kube-proxy-key.pem
+
+- name: 分發k8s設定檔
+  template: src={{ item }} dest={{ k8s_work_dir }}/cfg/{{ item.split('.')[:-1]|join('.') }}
+  with_items:
+    - bootstrap.kubeconfig.j2
+    - kubelet.conf.j2
+    - kubelet-config.yml.j2
+    - kube-proxy.kubeconfig.j2
+    - kube-proxy.conf.j2
+    - kube-proxy-config.yml.j2
+
+- name: 分發service文件
+  template: src={{ item }} dest=/usr/lib/systemd/system/{{ item.split('.')[:-1]|join('.') }}
+  with_items:
+    - kubelet.service.j2
+    - kube-proxy.service.j2
+
+- name: 啟動k8s node組件
+  systemd: name={{ item }} state=restarted enabled=yes daemon_reload=yes
+  with_items:
+    - kubelet
+    - kube-proxy
+
+- name: 分發預準備鏡像（需要花費一些時間...）
+  copy: src={{ software_dir }}/image.tar.gz dest={{ tmp_dir }}
+
+- name: 導入鏡像（需要花費一些時間...）
+  shell: cd {{ tmp_dir }} && \
+    tar zxf image.tar.gz && \
+    for image in $(ls *.tar);do docker load < $image;done

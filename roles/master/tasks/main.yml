@@ -1,0 +1,103 @@
+---
+- name: 創建工作目錄
+  file: dest={{ k8s_work_dir }}/{{ item }} state=directory
+  with_items:
+    - bin
+    - cfg
+    - ssl
+    - logs
+
+- name: 創建etcd證書目錄
+  file: dest={{ k8s_work_dir }}/ssl/etcd state=directory
+
+- name: 創建臨時目錄
+  file: dest={{ tmp_dir }} state=directory
+
+- name: 分發並解壓k8s二進位包
+  unarchive: src={{ item }} dest={{ tmp_dir }}
+  with_fileglob:
+    - "{{ software_dir }}/kubernetes-*.tar.gz"
+
+- name: 移動k8s master二進位檔案
+  shell: cp -rf {{ tmp_dir }}/kubernetes/server/bin/{kube-apiserver,kube-controller-manager,kube-scheduler} {{ k8s_work_dir }}/bin && \
+    cp -rf {{ tmp_dir }}/kubernetes/server/bin/kubectl /usr/bin
+
+- name: 分發k8s證書
+  copy: src=k8s_cert/{{ item }} dest={{ k8s_work_dir }}/ssl
+  with_items:
+    - ca.pem
+    - ca-key.pem
+    - server.pem
+    - server-key.pem
+    - kube-controller-manager.pem
+    - kube-controller-manager-key.pem
+    - kube-scheduler.pem
+    - kube-scheduler-key.pem
+    - admin.pem
+    - admin-key.pem
+
+- name: 分發etcd證書
+  copy: src=etcd_cert/{{ item }} dest={{ k8s_work_dir }}/ssl/etcd
+  with_items:
+    - ca.pem
+    - server.pem
+    - server-key.pem
+
+- name: 分發token文件
+  copy: src=token.csv dest={{ k8s_work_dir }}/cfg
+
+- name: 分發k8s設定檔
+  template: src={{ item }} dest={{ k8s_work_dir }}/cfg/{{ item.split('.')[:-1]|join('.') }}
+  with_items:
+    - kube-apiserver.conf.j2
+    - kube-controller-manager.conf.j2
+    - kube-scheduler.conf.j2
+    - kube-controller-manager.kubeconfig.j2
+    - kube-scheduler.kubeconfig.j2
+
+- name: 分發service文件
+  template: src={{ item }} dest=/usr/lib/systemd/system/{{ item.split('.')[:-1]|join('.') }}
+  with_items:
+    - kube-apiserver.service.j2
+    - kube-controller-manager.service.j2
+    - kube-scheduler.service.j2
+
+- name: 啟動k8s master組件
+  systemd: name={{ item }} state=restarted enabled=yes daemon_reload=yes
+  with_items:
+    - kube-apiserver
+    - kube-controller-manager
+    - kube-scheduler
+
+- name: 創建kubectl設定檔目錄
+  file: dest=/root/.kube state=directory
+- name: 分發k8s設定檔
+  template: src=config.j2 dest=/root/.kube/config
+
+- name: 查看集群狀態
+  shell: sleep 3 && kubectl get cs
+  register: cs
+- debug: var=cs.stdout_lines
+
+- name: 拷貝RBAC檔
+  copy: src={{ item }} dest={{ tmp_dir }}
+  with_items:
+    - kubelet-bootstrap-rbac.yaml
+    - apiserver-to-kubelet-rbac.yaml
+
+- name: 授權APIServer訪問Kubelet與授權kubelet bootstrap
+  ignore_errors: yes
+  shell: |
+    sleep 3
+    kubectl apply -f {{ tmp_dir }}/apiserver-to-kubelet-rbac.yaml
+    kubectl apply -f {{ tmp_dir }}/kubelet-bootstrap-rbac.yaml
+
+- name: 自動審批Kubelet證書
+  ignore_errors: yes
+  shell: |
+    #自動批准首次申請證書的 CSR 請求
+    kubectl create clusterrolebinding node-client-auto-approve-csr --clusterrole=system:certificates.k8s.io:certificatesigningrequests:nodeclient --user=kubelet-bootstrap
+    # 自動批准kubelet用戶端證書續簽
+    kubectl create clusterrolebinding node-client-auto-renew-crt --clusterrole=system:certificates.k8s.io:certificatesigningrequests:selfnodeclient --group=system:nodes
+    # 自動批准kubelet服務端證書續簽
+    kubectl create clusterrolebinding node-server-auto-renew-crt --clusterrole=system:certificates.k8s.io:certificatesigningrequests:selfnodeserver --group=system:nodes

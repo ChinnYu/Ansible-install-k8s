@@ -1,0 +1,32 @@
+---
+# 這個劇本在所有節點上運行
+
+- name: 關閉firewalld
+  service: name=firewalld state=stopped enabled=no
+
+- name: 關閉selinux
+  lineinfile:
+    dest: /etc/selinux/config
+    regexp: "^SELINUX="
+    line: "SELINUX=disabled"
+
+- name: 關閉swap
+  lineinfile:
+    dest: /etc/fstab
+    regexp: ".*swap"
+    line: ""
+
+- name: 即時生效
+  shell: setenforce 0 ; swapoff -a
+
+- name: 拷貝時區
+  copy: src=/usr/share/zoneinfo/Asia/Taipei dest=/etc/localtime
+
+- name: 添加hosts
+  template: src=hosts.j2 dest=/etc/hosts
+
+#- name: 同步系統時間
+#  yum: name=ntpdate state=present
+#- name: 同步系統時間
+#  shell: ntpdate time.windows.com
+

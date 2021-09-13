@@ -1,0 +1,34 @@
+# 安裝目錄
+software_dir: '/root/binary_pkg'
+k8s_work_dir: '/opt/kubernetes'
+etcd_work_dir: '/opt/etcd'
+tmp_dir: '/tmp/k8s'
+
+# 集群網路
+service_cidr: '10.0.0.0/24'
+cluster_dns: '10.0.0.2'   # 與roles/addons/files/coredns.yaml中IP一致，並且是service_cidr中的IP
+pod_cidr: '10.244.0.0/16' # 與roles/addons/files/calico.yaml中網段一致
+service_nodeport_range: '30000-32767'
+cluster_domain: 'cluster.local'
+
+# 高可用，如果部署單Master，該項忽略
+vip: '192.168.31.88'
+nic: 'ens33'  # 修改為實際內網網卡名
+
+# 自簽證書可信任IP列表，為方便擴展，可添加多個預留IP
+cert_hosts:
+  # 包含所有LB、VIP、Master IP和service_cidr的第一個IP
+  k8s:
+    - 10.0.0.1
+    - 192.168.31.71
+    - 192.168.31.72
+    - 192.168.31.73
+    - 192.168.31.74
+    - 192.168.31.81
+    - 192.168.31.82
+    - 192.168.31.88
+  # 包含所有etcd節點IP
+  etcd:
+    - 192.168.31.71
+    - 192.168.31.72
+    - 192.168.31.73

@@ -1,0 +1,42 @@
+---
+- name: 創建工作目錄
+  file: dest={{ etcd_work_dir }}/{{ item }} state=directory
+  with_items:
+    - bin
+    - cfg
+    - ssl
+
+- name: 創建臨時目錄
+  file: dest={{ tmp_dir }} state=directory
+
+- name: 分發並解壓etcd二進位包
+  unarchive: src={{ item }} dest={{ tmp_dir }}
+  with_fileglob:
+    - "{{ software_dir }}/etcd-v*.tar.gz"
+
+- name: 移動etcd二進位檔案
+  shell: cp -rf {{ tmp_dir }}/etcd-v*/{etcd,etcdctl} {{ etcd_work_dir }}/bin
+
+- name: 分發證書
+  copy: src=etcd_cert/{{ item }} dest={{ etcd_work_dir }}/ssl
+  with_items:
+    - ca.pem
+    - server.pem
+    - server-key.pem
+
+- name: 分發etcd設定檔
+  template: src=etcd.conf.j2 dest={{ etcd_work_dir }}/cfg/etcd.conf
+
+- name: 分發service文件
+  template: src=etcd.service.j2 dest=/usr/lib/systemd/system/etcd.service
+
+- name: 啟動etcd
+  systemd: name=etcd state=restarted enabled=yes daemon_reload=yes
+
+- name: 分發etcd腳本
+  template: src=etcd.sh.j2 dest={{ tmp_dir }}/etcd.sh mode=u+x
+
+- name: 獲取etcd集群狀態
+  shell: /bin/bash {{ tmp_dir }}/etcd.sh
+  register: status
+- debug: var=status.stdout_lines
