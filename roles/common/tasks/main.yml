@@ -19,14 +19,17 @@
 - name: 即時生效
   shell: setenforce 0 ; swapoff -a
 
+- name: iptables 規則初始化
+  shell: iptables -P FORWARD ACCEPT
+
 - name: 拷貝時區
   copy: src=/usr/share/zoneinfo/Asia/Taipei dest=/etc/localtime
 
 - name: 添加hosts
   template: src=hosts.j2 dest=/etc/hosts
 
-#- name: 同步系統時間
-#  yum: name=ntpdate state=present
-#- name: 同步系統時間
-#  shell: ntpdate time.windows.com
+- name: 同步系統時間
+  yum: name=ntpdate state=present
+- name: 同步系統時間
+  shell: ntpdate time.google.com
 

@@ -31,7 +31,11 @@
   template: src=etcd.service.j2 dest=/usr/lib/systemd/system/etcd.service
 
 - name: 啟動etcd
-  systemd: name=etcd state=restarted enabled=yes daemon_reload=yes
+#  systemd: name=etcd state=restarted enabled=yes daemon_reload=yes
+  systemd: name=etcd enabled=yes daemon_reload=yes
+
+- name: 重啟server
+  reboot:
 
 - name: 分發etcd腳本
   template: src=etcd.sh.j2 dest={{ tmp_dir }}/etcd.sh mode=u+x
